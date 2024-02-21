@@ -2,7 +2,7 @@
 #include "UART_MyApp.h"
 #include "ADC_MyApp.h"
 #include "LPIT_MyApp.h"
-//#include "Queue.h"
+#include "Queue.h"					// use Queue_Init()
 
 void LPIT0_IRQHandler(void)
 {
@@ -14,24 +14,24 @@ void LPIT0_IRQHandler(void)
 }
 
 int main(void) {
-	// variable
-//	float temp_result;
-
-//	UART_Init();
-//	UART_TransmitByte('A');
-
-//	ADC_Init();
-//	ADC_Start();
-//	adc_result = ADC_GetG_ADC_Result();
-//	temp_result = ADC_CalcTempValue(adc_result);
 
 	LPIT_Init();
 	ADC_Init();
+	UART_INIT();
+	Queue_Init();
+
 	LPIT_StartTimer();
+	LPUART0_StartReceiveINT();
 
     while(1) {
-    	// get temp result
-//    	temp_result = ADC_GetTempResult();
+    	if(1U == UART_GetRxIntFlagVar())		// receive interrupt flag
+    	{
+    		// respond command
+    		LPUART_WriteTempToPC();
+
+    		// clear flag
+    		UART_ClearRxIntFlagVar();
+    	}
     }
     return 0 ;
 }

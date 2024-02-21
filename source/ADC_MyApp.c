@@ -74,20 +74,18 @@ void ADC0_IRQHandler(void)
 	g_adc_result = (uint16_t)(ADC0->R[0]);
 	g_adc_complete_flag = 1;					// finished flag
 //	g_adc_counter ++;
+
+	// save conv result t0 queue
+	Queue_ForcePush(g_adc_result);
+
 	// stop ADC conversion - due to single mode
 }
 
 // function calculate and return temp result
-float ADC_GetTempResult()
+static float ADC_GetTempResult(uint16_t adc_result)
 {
 	float Temp1;
-
-	if(0U == g_adc_complete_flag)
-	{
-		return 0;
-	}
-
-	float Vtemp = g_adc_result * 0.003125 ; 			//Convert the ADC reading into voltage
+	float Vtemp = adc_result * 0.003125 ; 			//Convert the ADC reading into voltage
 	if(Vtemp >= .7012){								//Check for Hot or Cold Slope
 		Temp1 = 25 - ((Vtemp - .7012)/ .001646);	//Cold Slope
 	}else {
@@ -97,27 +95,38 @@ float ADC_GetTempResult()
 }
 
 // ---------------------------------------------------------------
-//// queue saves 10 latest temperature value
-//static Queue_Type queue_temperature;
-//
-//// queue save conversion results
-//static Queue_Type queue_conv_result;
-//
-//// queue status
-//static Queue_Status_Type queue_status;
+#define MAX_SIZE 10						// 10 latest temp value
 
-//// function save conversion results
-//void ADC_SaveConvResultToQueue()
-//{
-//	if(1U == g_adc_complete_flag)			// conversion finish
-//	{
-//		// clear flag
-//		g_adc_complete_flag = 0;
-//		// save to queue
-////		queue_status = Queue_ForcePush(g_adc_result);
-//		Queue_ForcePush(g_adc_result);
-//	}
-//}
-//
-//// function calculate temperature value
+// queue saves 10 latest temperature value
+static Queue_Type queue_temperature;
+
+// function get queue_temperature
+Queue_Type ADC_GetQueueTempVar()
+{
+	return queue_temperature;
+}
+
+// queue save conversion results
+static Queue_Type queue_conv_result;
+
+// function calculate temperature value, save to queue_temperature
+void ADC_CalcTemp()
+{
+	uint8_t idx;
+	uint32_t temp;
+	queue_conv_result = Queue_GetVarQueue();
+	for(idx = 0; idx < MAX_SIZE; idx++)
+	{
+		temp = queue_conv_result.QueueData[idx];
+		if(0U == temp)
+		{
+			queue_temperature.QueueData[idx] = 0;
+		}
+		else
+		{
+			queue_temperature.QueueData[idx] = ADC_GetTempResult(temp);
+		}
+	}
+
+}
 

@@ -3,7 +3,7 @@
 
 // library
 #include <MKE16Z4.h>
-//#include "Queue.h"					// queue saves SC1A[RA]
+#include "Queue.h"					// queue saves SC1A[RA]
 
 // data type
 
@@ -12,6 +12,7 @@
 // function prototype
 void ADC_Init();
 void ADC_Start();
-float ADC_GetTempResult();
+void ADC_CalcTemp();
+Queue_Type ADC_GetQueueTempVar();
 
 #endif /*__ADC_MYAPP_H__*/

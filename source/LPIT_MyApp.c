@@ -44,4 +44,10 @@ void LPIT_StartTimer()
 	LPIT0->SETTEN = LPIT_SETTEN_SET_T_EN_0(1U);
 }
 
+// LPIT_Disable
+void LPIT_StopTimer()
+{
+	LPIT0->CLRTEN = LPIT_CLRTEN_CLR_T_EN_0(1U);
+}
+
 // void LPIT0_IRQHandler(void){}

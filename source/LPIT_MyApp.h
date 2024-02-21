@@ -9,5 +9,6 @@
 // function prototype
 void LPIT_Init();
 void LPIT_StartTimer();
+void LPIT_StopTimer();
 
 #endif /*__LPIT_MYAPP_H__*/

@@ -3,100 +3,214 @@
 // variable
 
 // function definition
-void UART_Init()
+static void UART_ClockPort_Init()
 {
-	// clock for UART - asyn peripheral clock & bus clock
+	// clock
+	// --asyn clock source
 	PCC->CLKCFG[PCC_LPUART0_INDEX] &= ~PCC_CLKCFG_CGC_MASK;		// disable bus clock
+
 	SCG->SIRCDIV &= ~SCG_SIRCDIV_SIRCDIV2_MASK;
-	SCG->SIRCDIV |= SCG_SIRCDIV_SIRCDIV2(3U);					// divide 4 -> f = 2Mhz
+	SCG->SIRCDIV |= SCG_SIRCDIV_SIRCDIV2(3U);					// divide 4
 
-	PCC->CLKCFG[PCC_LPUART0_INDEX] &= ~PCC_CLKCFG_PCS_MASK;
-	PCC->CLKCFG[PCC_LPUART0_INDEX] |= PCC_CLKCFG_PCS(2U);		// slow IRC, default clock = 8MHz
+	SCG->SIRCCFG |= SCG_SIRCCFG_RANGE_MASK;						// 8MHZ
 
-	PCC->CLKCFG[PCC_LPUART0_INDEX] |= PCC_CLKCFG_CGC(1U);		// bus clock
+	PCC->CLKCFG[PCC_LPUART0_INDEX] &= ~ PCC_CLKCFG_PCS_MASK;
+	PCC->CLKCFG[PCC_LPUART0_INDEX] |= PCC_CLKCFG_PCS(2U);		// SIRC
 
-	// clock for PORT - bus clock
+	// --bus clock for portB, LPUART0
 	PCC->CLKCFG[PCC_PORTB_INDEX] |= PCC_CLKCFG_CGC(1U);
+	PCC->CLKCFG[PCC_LPUART0_INDEX] |= PCC_CLKCFG_CGC(1U);
 
 	// update system core clock
 	SystemCoreClockUpdate();
 
-	// Port
+	// port - TX : B1, RX : B0
 	PORTB->PCR[1] &= ~PORT_PCR_MUX_MASK;
-	PORTB->PCR[1] |= PORT_PCR_MUX(2U);				// mux: ALT2
-
+	PORTB->PCR[1] |= PORT_PCR_MUX(2U);		// ALT2
 	PORTB->PCR[1] |= PORT_PCR_PE(1U);
-	PORTB->PCR[1] |= PORT_PCR_PS(1U);				// pull-up
+	PORTB->PCR[1] |= PORT_PCR_PS(1U);		// pull-up
 
 	PORTB->PCR[0] &= ~PORT_PCR_MUX_MASK;
-	PORTB->PCR[0] |= PORT_PCR_MUX(2U);				// mux: ALT2
-
+	PORTB->PCR[0] |= PORT_PCR_MUX(2U);		// ALT2
 	PORTB->PCR[0] |= PORT_PCR_PE(1U);
-	PORTB->PCR[0] |= PORT_PCR_PS(1U);				// pull-up
+	PORTB->PCR[0] |= PORT_PCR_PS(1U);		// pull-up
+}
 
-	// CTRL[RE], CTRL[TE] both = 0
-	LPUART0->CTRL &= ~LPUART_CTRL_TE_MASK;
+void UART_INIT()
+{
+	 UART_ClockPort_Init();
+
+	// CTRL[RE], CLTR[TE] are both = 0
 	LPUART0->CTRL &= ~LPUART_CTRL_RE_MASK;
+	LPUART0->CTRL &= ~LPUART_CTRL_TE_MASK;
 
-	// calculate - f = 2MHz, baurade = 9600, (OSR+1) * SBR * baudrate = f
-	// -- OSR divider: limit of 3 -> 31, = 3
-	LPUART0->BAUD |= LPUART_BAUD_BOTHEDGE(1U);	// bothedge to be set
-	LPUART0->BAUD = (LPUART0->BAUD & ~LPUART_BAUD_OSR_MASK) | LPUART_BAUD_OSR(3U);
-
-	// -- baudrate divider - SBR: limit of 13 bit length, = 52
+	// baudrate 2M-> SBR: 52, OSR: 3
+	// --baud divider
 	LPUART0->BAUD = (LPUART0->BAUD & ~LPUART_BAUD_SBR_MASK) | LPUART_BAUD_SBR(52U);
+	// --OSR DIVIDER
+	LPUART0->BAUD |= LPUART_BAUD_BOTHEDGE(1U);
+	LPUART0->BAUD = (LPUART0->BAUD & ~LPUART_BAUD_OSR_MASK) | LPUART_BAUD_OSR(3U);		// read-modify-write
+	/*UART0 Tx B1
+	 *UART0 Rx B0 */
 
-	// fame
-	// -- data length - M10, M7, M -> default 8 bit
+	// frame
+	// --data length (7/8/9/10) - M10 / M7 / M
+	LPUART0->BAUD &= ~LPUART_BAUD_M10_MASK;
+	LPUART0->CTRL &= ~LPUART_CTRL_M7_MASK;
+	LPUART0->CTRL &= ~LPUART_CTRL_M_MASK;
 
-	// -- stop bit
+	// --parity (even/odd/none) - PE / PT
+	LPUART0->CTRL &= ~ LPUART_CTRL_PE_MASK;
+
+	// --number of stop bits (1/2) - SBNS
 	LPUART0->BAUD &= ~LPUART_BAUD_SBNS_MASK;
 
-	// -- parity
-	LPUART0->CTRL &= ~LPUART_CTRL_PE_MASK;
-
-	// -- MSB first
+	// --lsb first or msb first - MSBF
 	LPUART0->STAT &= ~LPUART_STAT_MSBF_MASK;
-
-	// polling or interrupt
-		// Tx interrupt - tie, tcie
-		// Rx interrupt - rie
-		// NVCI
 }
 
-void UART_TransmitByte(uint8_t ch)
+void UART_SendByte(uint8_t ch)
 {
-	// enable CTRL[TE]
-	LPUART0->CTRL |= LPUART_CTRL_TE(1U);
+	// enable TE
+	LPUART0->CTRL |= LPUART_CTRL_TE_MASK;
 
-	// wait for Tx buffer empty - TDRE = 1
-	while(0U == (LPUART0->STAT & LPUART_STAT_TDRE_MASK));
-	// assign to Tx_buffer - DATA
+	// wait tx buffer is empty - TDRE
+	while( 0U == (LPUART0->STAT & LPUART_STAT_TDRE_MASK));
+
+	// TX_buffer = ch
 	LPUART0->DATA = ch;
 
-	// wait for transmission complete - TC = 1
-	while(0U == (LPUART0->STAT & LPUART_STAT_TC_MASK));
+	// wait transmission is complete - TC
+	while( 0U == (LPUART0->STAT & LPUART_STAT_TC_MASK));
 
-	// disable CTR[TE]
+	// disable TE
+	LPUART0->CTRL &= ~LPUART_CTRL_TE_MASK;
+
+}
+
+void UART_SendString(uint8_t* str, uint8_t len)
+{
+	uint8_t idx;
+
+	// enable TE
+	LPUART0->CTRL |= LPUART_CTRL_TE_MASK;
+
+	for(idx = 0; idx < len; idx++)
+	{
+		// wait TX buffer is empty - TDRE
+		while( 0U == (LPUART0->STAT & LPUART_STAT_TDRE_MASK));
+
+		// TX buffer = ch
+		LPUART0->DATA = str[idx];
+	}
+	// wait transmission is complete - TC
+	while( 0U == (LPUART0->STAT & LPUART_STAT_TC_MASK));
+
+	// disable TE
 	LPUART0->CTRL &= ~LPUART_CTRL_TE_MASK;
 }
 
-void UART_TransmitString(uint8_t * str, uint8_t len)
+volatile uint8_t g_Data;
+volatile uint8_t g_CorrCommandFlag = 0U;
+volatile uint8_t RxIntFlag = 0U;
+
+// function get RxIntFlag
+uint8_t UART_GetRxIntFlagVar()
+{
+	return RxIntFlag;
+}
+
+// function clear RxIntFlag
+void UART_ClearRxIntFlagVar()
+{
+	RxIntFlag = 0U;
+}
+
+//
+void LPUART0_IRQHandler(void)
+{
+	if(0U != (LPUART0->STAT & LPUART_STAT_RDRF_MASK))
+	{
+		g_Data = LPUART0->DATA;
+		RxIntFlag = 1U;
+
+		if(0x55 == g_Data){
+			g_CorrCommandFlag = 1U;
+
+			// Stop LPIT
+			LPIT_StopTimer();
+		}
+		else
+		{
+			g_CorrCommandFlag = 0U;
+		}
+	}
+}
+
+// function solve received command 0x55
+#define MAX_SIZE 10								// size of queue
+static Queue_Type queue_temp;
+
+void LPUART_WriteTempToPC()
 {
 	uint8_t idx;
-	// enable CTRL[TE]
-	LPUART0->CTRL |= LPUART_CTRL_TE(1U);
+	uint32_t temperature;
+	uint8_t x100;
+	uint8_t x10;
 
-	// transmit string
-	for(idx = 0; idx < len; idx++)
+	if(1U == g_CorrCommandFlag)
 	{
-		while(0U == (LPUART0->STAT & LPUART_STAT_TDRE_MASK));
-		LPUART0->DATA = str[idx];
+		// stop Timer
+//		LPIT_StopTimer();
+
+		// write 10 latest temp value
+		ADC_CalcTemp();					// calc from conversion result to temp value
+		queue_temp = ADC_GetQueueTempVar();
+		for(idx = 0; idx < MAX_SIZE; idx++)
+		{
+			temperature = queue_temp.QueueData[idx];
+			// write x100
+			x100 = temperature / 100;
+			if(0U != x100)
+			{
+				UART_SendByte(0x30 + x100);
+			}
+			temperature %= 100;
+			// write x10
+			x10 = temperature/10;
+			if(0U != x10)
+			{
+			UART_SendByte(0x30 + x10);
+			}
+			temperature %= 10;
+			// write x1
+			UART_SendByte(0x30 + temperature % 10);
+
+			// end 1 value
+			UART_SendString((uint8_t*)"  ", 2);
+		}
+
+		// end 1 correct command
+		UART_SendByte('\n');
+
+		// start Timer
+		LPIT_StartTimer();
+
+		// clear flag
+		g_CorrCommandFlag = 0U;
 	}
+}
 
-	// wait until TC = 1
-	while(0U == (LPUART0->STAT & LPUART_STAT_TC_MASK));
+// enable RE
+void LPUART0_StartReceiveINT()
+{
+	// interrupt or polling
+		// Tx interrupt: tie / tcie
+		// Rx interrupt: RIE
+		// NVIC
+	LPUART0->CTRL |= LPUART_CTRL_RIE(1U);
+	NVIC_EnableIRQ(LPUART0_IRQn);
 
-	// disable CTR[TE]
-	LPUART0->CTRL &= ~LPUART_CTRL_TE_MASK;
+	// enable receive interrupt
+	LPUART0->CTRL |= LPUART_CTRL_RE_MASK;
 }
