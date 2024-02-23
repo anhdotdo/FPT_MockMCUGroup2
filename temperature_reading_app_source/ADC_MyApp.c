@@ -129,4 +129,3 @@ void ADC_CalcTemp()
 	}
 
 }
-
